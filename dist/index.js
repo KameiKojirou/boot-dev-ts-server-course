@@ -1,6 +1,30 @@
 // src/index.ts
 import express from "express";
 import { config } from "./config.js"; // Ensure .js extension for Node ESM compatibility
+class BadRequestError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "BadRequestError";
+    }
+}
+class UnauthorizedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "UnauthorizedError";
+    }
+}
+class ForbiddenError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ForbiddenError";
+    }
+}
+class NotFoundError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "NotFoundError";
+    }
+}
 const app = express();
 const PORT = 8080;
 app.get("/api/healthz", handlerReadiness);
@@ -42,21 +66,13 @@ async function handlerValidateChirp(req, res, next) {
             parsedBody = JSON.parse(body);
         }
         catch (error) {
-            res
-                .status(400)
-                .set("Content-Type", "application/json")
-                .send(JSON.stringify({ error: "Something went wrong" }));
-            return;
+            throw new BadRequestError("Invalid JSON in request body");
         }
         if (!parsedBody.body || typeof parsedBody.body !== "string") {
-            res
-                .status(400)
-                .set("Content-Type", "application/json")
-                .send(JSON.stringify({ error: "Something went wrong" }));
-            return;
+            throw new BadRequestError("Invalid chirp: body must be a string");
         }
         if (parsedBody.body.length > 140) {
-            throw new Error("Chirp is too long");
+            throw new BadRequestError("Chirp is too long. Max length is 140");
         }
         const profaneWords = ["kerfuffle", "sharbert", "fornax"];
         let cleanedBody = parsedBody.body;
@@ -95,8 +111,26 @@ app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 // Error-handling middleware
 function errorHandler(err, req, res, next) {
     console.log(err);
-    res.status(500).json({
-        error: "Something went wrong on our end",
+    let status = 500;
+    let message = "Something went wrong on our end";
+    if (err instanceof BadRequestError) {
+        status = 400;
+        message = err.message;
+    }
+    else if (err instanceof UnauthorizedError) {
+        status = 401;
+        message = err.message;
+    }
+    else if (err instanceof ForbiddenError) {
+        status = 403;
+        message = err.message;
+    }
+    else if (err instanceof NotFoundError) {
+        status = 404;
+        message = err.message;
+    }
+    res.status(status).json({
+        error: message,
     });
 }
 app.use(errorHandler);
